@@ -848,6 +848,27 @@ test('redact safe stringify', async () => {
   assert.equal(other.mySecondBigInt, 222)
 })
 
+test('child redact censor uses the same safe stringify as the root logger', async () => {
+  const rootStream = sink()
+  const childStream = sink()
+  const censor = () => {
+    const value = { big: 10n }
+    value.self = value
+    return value
+  }
+  const redact = { paths: ['secret'], censor }
+  const root = pino({ redact }, rootStream)
+  const child = pino({}, childStream).child({}, { redact })
+
+  root.info({ secret: 1 })
+  child.info({ secret: 1 })
+
+  const rootResult = await once(rootStream, 'data')
+  const childResult = await once(childStream, 'data')
+  assert.deepEqual(childResult.secret, rootResult.secret)
+  assert.deepEqual(childResult.secret, { big: 10, self: '[Circular]' })
+})
+
 test('censor function should not be called for non-existent nested paths (issue #2313)', async () => {
   const stream = sink()
   const censorCalls = []
